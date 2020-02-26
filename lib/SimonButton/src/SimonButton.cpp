@@ -67,8 +67,8 @@ void SimonButton::update(){
           prevTime=millis();
           currentTimeout=timeoutVariable;
           timeoutVariable=timeoutVariable-100;
-          if(timeoutVariable<300){
-            timeoutVariable=200;
+          if(timeoutVariable<400){
+            timeoutVariable=400;
           }
         }
       }break;

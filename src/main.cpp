@@ -3,7 +3,7 @@
 #include "Bounce2.h"
 #include "SimonButton.hpp"
 #include <SoftwareSerial.h>
-#include "DFMiniMp3.h"
+#include "DFPlayerMini_Fast.h"
 
 void gameStateMachine();
 
@@ -29,11 +29,13 @@ void gameStateMachine();
 #define LOCK_DISABLE false
 #define LOCK_ENABLE true
 
-#define GAME_SEQUENCE_LENGHT 6
+#define GAME_SEQUENCE_LENGHT 10
 #define GAME_SPEED 10
-#define GAME_VOLUME 5
+#define GAME_VOLUME 15
 
 SimonButton::lightOrders gameMode = SimonButton::lightOrders::ON_VARIABLE;
+
+unsigned int counterWinGames = 0;
 
 enum class gameStates{
   RESET,
@@ -64,68 +66,33 @@ SimonButton *yellowButton;
 void restartMP3();
 
 /***********************************************
-              CLASES PROPIAS
-************************************************/
-//TODO desacoplar esta varaible global
-bool playFinished = false;
-class Mp3Notify
-{
-  public:
-    static void OnError(uint16_t errorCode)
-    {
-      restartMP3();
-    }
-
-    static void OnPlayFinished(DfMp3_PlaySources source,uint16_t globalTrack)
-    {
-    }
-
-    static void OnCardOnline(uint16_t code)
-    {
-    }
-
-    static void OnUsbOnline(uint16_t code)
-    {
-    }
-
-    static void OnCardInserted(uint16_t code)
-    {
-    }
-
-    static void OnUsbInserted(uint16_t code)
-    {
-    }
-
-    static void OnCardRemoved(uint16_t code)
-    {
-    }
-
-    static void OnUsbRemoved(uint16_t code)
-    {
-    }
-};
-
-/***********************************************
             VARIABLES Y OBJETOS GLOBALES
  ***********************************************/
 
 //Para la comunicacion del modulo DFPlayer mini y Araduino
-SoftwareSerial mySerial(SOFTWARE_SERIAL_RX_PIN, SOFTWARE_SERIAL_TX_PIN);
-//Objeto para controlar el mp3
-DFMiniMp3<SoftwareSerial, Mp3Notify> myMP3(mySerial);
+SoftwareSerial mySerial(SOFTWARE_SERIAL_RX_PIN, SOFTWARE_SERIAL_TX_PIN); // RX, TX
+DFPlayerMini_Fast myMP3;
 
 void restartMP3(){
-  myMP3.stop();
-  myMP3.start();
+  myMP3.sleep();
+  delay(50);
+  myMP3.flush();
+  delay(50);
+  myMP3.wakeUp();
+  delay(50);
 }
 
 
 
 void setup() {
-  Serial.begin(9600);
   // put your setup code here, to run once:
   pinMode(LOCK_PIN, OUTPUT);
   digitalWrite(LOCK_PIN, LOCK_ENABLE);
+
+  Serial.begin(9600);
+  mySerial.begin(9600);
+  myMP3.begin(mySerial);
+
 
   //Esto es asi porque funciona.
   unsigned int val = 0;
@@ -156,27 +123,11 @@ void setup() {
   gameButtonsList.add(yellowButton);
   gameButtonsList.add(blueButton);
 
-  mySerial.begin(9600);
-  myMP3.begin();
-  myMP3.stop();
-
-  uint16_t trackCount = myMP3.getTotalTrackCount(DfMp3_PlaySource_Sd);
-  myMP3.setVolume(GAME_VOLUME);
-  uint16_t volume = myMP3.getVolume();
-
-#ifdef DEBUG_SERIAL
-  Serial.println("Reproductor incializado.");
-  Serial.println("Starting...");
-  String message = "Cantidad de tracks detectados:" + String(trackCount);
-  Serial.println(message);
-  message = "Volumen inicial:" + String(volume);
-  Serial.println(message);
-  message = "Valor inicial random:" + String(random(1, trackCount + 1));
-  Serial.println(message);
-#endif
+  restartMP3();
+  myMP3.volume(GAME_VOLUME);
 }
 
-bool anyFell = false;
+bool anyRose = false;
 
 void loop() {
   for (uint8_t i = 0; i < gameButtonsList.size(); i++) {
@@ -187,27 +138,25 @@ void loop() {
     }else{
       currentButton->putLightOrder(SimonButton::lightOrders::OFF);
     }
-    if(currentButton->fell()){
-      anyFell=true;
-
-      if(simonState!=simonStates::WAITING_FIRST_BUTTON){
-        myMP3.stop();
-        myMP3.start();
-        myMP3.playGlobalTrack(currentButton->getTrackId());
-        playFinished = false;
-      }
+    if(currentButton->rose()){
+      randomSeed(millis());
+      anyRose=true;
+      myMP3.pause();
+      myMP3.play(currentButton->getTrackId());
     }
 
   }
   gameStateMachine();
-  anyFell=false;
+  anyRose=false;
 }
-
-
 
 bool simonStateMachine(){
   static int currentShowingSequence = 0;
   static int currentWaitingSequence = 0;
+  static unsigned int prevTime = 0;
+  static bool goToShow=false;
+  static SimonButton *firstButton;
+
   /*
   RESET,
   WAITING_FIRST_BUTTON,
@@ -218,57 +167,78 @@ bool simonStateMachine(){
   */
   switch (simonState) {
     case simonStates::RESET:{
+      myMP3.volume(GAME_VOLUME);
       #ifdef DEBUG_SERIAL
       Serial.println(F("simonStateMachine[RESET]:Going to WAITING_FIRST_BUTTON state "));
-      simonState=simonStates::WAITING_FIRST_BUTTON;
       #endif
+      simonState=simonStates::WAITING_FIRST_BUTTON;
+      goToShow=false;
     }break;
     case simonStates::WAITING_FIRST_BUTTON:{
-      bool goToShow=false;
       SimonButton *currentButton;
       for (uint8_t i = 0; i < gameButtonsList.size(); i++) {
         currentButton = gameButtonsList.getNode(i)->data;
-        if(currentButton->fell()){
+        if(currentButton->rose()&&goToShow==false){
           #ifdef DEBUG_SERIAL
           Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:Button pressed:"));
           Serial.println(currentButton->getButtonPin());
           #endif
           goToShow=true;
           i=gameButtonsList.size()+1;
+          prevTime=millis();
+          firstButton=currentButton;
+        }else if(currentButton->rose()&&goToShow==true){
+          myMP3.volume(GAME_VOLUME);
+          myMP3.pause();
+          myMP3.play(1);
+          #ifdef DEBUG_SERIAL
+          Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:Button pressed ERROR:"));
+          Serial.println(currentButton->getButtonPin());
+          Serial.println(F("simonStateMachine[WAITING_FIRST_BUTTON]:Going to ERROR state"));
+          #endif
+          simonState=simonStates::ERROR;
         }
       }
       if(goToShow){
-        #ifdef DEBUG_SERIAL
-        Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:Clearing "));
-        Serial.print(gameSequenceList.size());
-        Serial.println(F(" elements."));
+        unsigned int currentTime = millis();
+        if(currentTime-prevTime>1000){
+          #ifdef DEBUG_SERIAL
+          Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:Clearing "));
+          Serial.print(gameSequenceList.size());
+          Serial.println(F(" elements."));
 
-        Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:Selected button from list of "));
-        Serial.print(gameButtonsList.size());
-        Serial.println(F(" elements."));
+          Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:Selected button from list of "));
+          Serial.print(gameButtonsList.size());
+          Serial.println(F(" elements."));
 
-        Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:First button is "));
-        Serial.println(currentButton->getButtonPin());
-        Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:First light is "));
-        Serial.println(currentButton->getLightPin());
+          Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:First button is "));
+          Serial.println(firstButton->getButtonPin());
+          Serial.print(F("simonStateMachine[WAITING_FIRST_BUTTON]:First light is "));
+          Serial.println(firstButton->getLightPin());
 
-        Serial.println(F("simonStateMachine[WAITING_FIRST_BUTTON]:Going to SHOWING_SEQUENCE state"));
-        #endif
-        gameSequenceList.clear();
-        gameSequenceList.add(currentButton);
+          Serial.println(F("simonStateMachine[WAITING_FIRST_BUTTON]:Going to SHOWING_SEQUENCE state"));
+          #endif
+          gameSequenceList.clear();
+          gameSequenceList.add(firstButton);
 
-        uint8_t buttonListSize = gameButtonsList.size();
-        uint8_t randomButtonIndex = random(0,buttonListSize);
-        SimonButton *buttonToAdd = gameButtonsList.get(randomButtonIndex);
+          uint8_t buttonListSize = gameButtonsList.size();
+          uint8_t randomButtonIndex = random(0,buttonListSize);
+          SimonButton *buttonToAdd = gameButtonsList.get(randomButtonIndex);
 
-        gameSequenceList.add(buttonToAdd);
+          while(firstButton==buttonToAdd){
+            randomButtonIndex = random(0,buttonListSize);
+            buttonToAdd = gameButtonsList.get(randomButtonIndex);
+            Serial.println("Di de baja uno.");
+          }
 
-        currentShowingSequence=0;
-        #ifdef DEBUG_SERIAL
-        Serial.print("gameSequenceList:");
-        Serial.println(gameSequenceList.size());
-        #endif
-        simonState=simonStates::SHOWING_SEQUENCE;
+          gameSequenceList.add(buttonToAdd);
+          currentShowingSequence=0;
+          #ifdef DEBUG_SERIAL
+          Serial.print("gameSequenceList:");
+          Serial.println(gameSequenceList.size());
+          #endif
+          simonState=simonStates::SHOWING_SEQUENCE;
+        }
       }
     }break;
     case simonStates::SHOWING_SEQUENCE:{
@@ -278,9 +248,9 @@ bool simonStateMachine(){
         if(currentShowingButton->getLightStatus()==SimonButton::lightStates::OFF&&orderSended==false){
           currentShowingButton->putLightOrder(gameMode);
           orderSended=true;
-          myMP3.stop();
-          myMP3.start();
-          myMP3.playGlobalTrack(currentShowingButton->getTrackId());
+          //restartMP3();
+          myMP3.pause();
+          myMP3.play(currentShowingButton->getTrackId());
         }else{
           if(orderSended==true&&currentShowingButton->getLightStatus()==SimonButton::lightStates::OFF){
             orderSended=false;
@@ -289,7 +259,6 @@ bool simonStateMachine(){
         }
 
       }else{
-
 
         #ifdef DEBUG_SERIAL
         Serial.println(F("simonStateMachine[SHOWING_SEQUENCE]:Going to WAITING_SEQUENCE state"));
@@ -307,7 +276,7 @@ bool simonStateMachine(){
       SimonButton *expectedButton = gameSequenceList.get(currentWaitingSequence);
       for (uint8_t i = 0; i < gameButtonsList.size(); i++) {
         SimonButton *currentButton = gameButtonsList.getNode(i)->data;
-        if(currentButton->fell()){
+        if(currentButton->rose()){
             if(expectedButton==currentButton&&currentWaitingSequence<=gameSequenceList.size()){
             currentWaitingSequence++;
             prevTime=millis();
@@ -315,8 +284,9 @@ bool simonStateMachine(){
             Serial.println(F("simonStateMachine[WAITING_SEQUENCE]:Button pressed OK"));
             #endif
           }else{
-            myMP3.setVolume(GAME_VOLUME+10);
-            myMP3.playGlobalTrack(1);
+            myMP3.volume(GAME_VOLUME);
+            myMP3.pause();
+            myMP3.play(1);
             #ifdef DEBUG_SERIAL
             Serial.println(F("simonStateMachine[WAITING_SEQUENCE]:Button pressed ERROR"));
             Serial.println(F("simonStateMachine[WAITING_SEQUENCE]:Going to ERROR state"));
@@ -344,22 +314,11 @@ bool simonStateMachine(){
             SimonButton *prevButton = gameButtonsList.get(gameSequenceList.size()-1);
             SimonButton *prevPrevButton = gameButtonsList.get(gameSequenceList.size()-2);
 
-            while((currentWaitingSequence>2)&&(buttonToAdd==prevButton)&&(buttonToAdd==prevPrevButton)){
+            while((buttonToAdd==prevButton)&&(buttonToAdd==prevPrevButton)){
               randomButtonIndex = random(0,buttonListSize);
               buttonToAdd = gameButtonsList.get(randomButtonIndex);
-              Serial.print("cWSequence");
+              Serial.println("Di de baja uno.");
             }
-            Serial.print("cWSequence");
-            Serial.print(currentWaitingSequence);
-
-            Serial.print("-buttonToAdd");
-            Serial.print((int)buttonToAdd);
-
-            Serial.print("-prevButton");
-            Serial.print((int)prevButton);
-
-            Serial.print("-prevPrevButton");
-            Serial.println((int)prevPrevButton);
 
             gameSequenceList.add(buttonToAdd);
             currentShowingSequence=0;
@@ -377,15 +336,23 @@ bool simonStateMachine(){
 
       Serial.println(F("simonStateMachine[ERROR]:Going to RESET state"));
       simonState=simonStates::RESET;
-      myMP3.setVolume(GAME_VOLUME);
+
+      for (uint8_t i = 0; i < gameButtonsList.size(); i++) {
+        SimonButton *currentButton = gameButtonsList.get(i);
+        currentButton->putLightOrder(SimonButton::lightOrders::RESET_TIMER_VARIABLE);
+      }
+      myMP3.volume(GAME_VOLUME);
 
 
     }break;
     case simonStates::WIN:{
-
-      Serial.println(F("simonStateMachine[WIN]:Going to RESET state"));
-      simonState=simonStates::RESET;
-
+        for (uint8_t i = 0; i < gameButtonsList.size(); i++) {
+          SimonButton *currentButton = gameButtonsList.get(i);
+          currentButton->putLightOrder(SimonButton::lightOrders::RESET_TIMER_VARIABLE);
+        }
+        Serial.println(F("simonStateMachine[WIN]:Going to RESET state"));
+        simonState=simonStates::RESET;
+        myMP3.volume(GAME_VOLUME);
       return true;
     }break;
     default:{
@@ -396,6 +363,7 @@ bool simonStateMachine(){
 }
 
 void gameStateMachine(){
+  static unsigned int prevTimeState = 0;
   /*
   RESET,
   IDLE,
@@ -422,17 +390,28 @@ void gameStateMachine(){
         #endif
         gameState=gameStates::WIN;
         digitalWrite(LOCK_PIN, LOCK_DISABLE);
+        prevTimeState=millis();
+        counterWinGames++;
+        if(counterWinGames%30==0){
+          restartMP3();
+        }
       }
     }break;
     case gameStates::WIN:{
       bool goingToResetCondition = false;
-      goingToResetCondition=anyFell;
+      unsigned int currenTime = millis();
+      if(currenTime-prevTimeState>30000){
+        goingToResetCondition=true;
+      }else if(anyRose){
+        goingToResetCondition=true;
+      }
       if(goingToResetCondition){
         #ifdef DEBUG_SERIAL
         Serial.println(F("gameStateMachine[WIN]:Game reset. Going to RESET state"));
         #endif
         gameState=gameStates::RESET;
       }
+
     }break;
     default:{
 
