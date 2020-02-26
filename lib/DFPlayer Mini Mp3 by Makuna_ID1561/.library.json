@@ -1,0 +1,55 @@
+{
+    "description": "Library for the DFPlayer Mini Mp3 module", 
+    "repository": {
+        "url": "https://github.com/Makuna/DFMiniMp3", 
+        "type": "git"
+    }, 
+    "platforms": [
+        "atmelavr", 
+        "atmelmegaavr", 
+        "atmelsam", 
+        "espressif32", 
+        "espressif8266", 
+        "gd32v", 
+        "infineonxmc", 
+        "intel_arc32", 
+        "kendryte210", 
+        "microchippic32", 
+        "nordicnrf51", 
+        "nordicnrf52", 
+        "ststm32", 
+        "ststm8", 
+        "teensy", 
+        "timsp430"
+    ], 
+    "export": {
+        "exclude": [
+            "extras", 
+            "docs", 
+            "tests", 
+            "test", 
+            "*.doxyfile", 
+            "*.pdf"
+        ], 
+        "include": null
+    }, 
+    "authors": [
+        {
+            "maintainer": true, 
+            "name": "Michael C. Miller", 
+            "url": null, 
+            "email": "makuna@live.com"
+        }
+    ], 
+    "keywords": [
+        "device", 
+        "control"
+    ], 
+    "id": 1561, 
+    "name": "DFPlayer Mini Mp3 by Makuna", 
+    "frameworks": [
+        "arduino"
+    ], 
+    "version": "1.0.6", 
+    "homepage": "https://github.com/Makuna/DFMiniMp3/wiki"
+}
