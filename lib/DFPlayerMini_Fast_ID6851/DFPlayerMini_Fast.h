@@ -9,8 +9,8 @@ const uint8_t STACK_SIZE      = 10;   //total number of bytes in a stack/packet 
 const uint8_t SB              = 0x7E; //start byte
 const uint8_t VER             = 0xFF; //version
 const uint8_t LEN             = 0x6;  //number of bytes after "LEN" (except for checksum data and EB)
-const uint8_t FEEDBACK        = 0;    //feedback requested
-const uint8_t NO_FEEDBACK     = 1;    //no feedback requested
+const uint8_t FEEDBACK        = 1;    //feedback requested
+const uint8_t NO_FEEDBACK     = 0;    //no feedback requested
 const uint8_t EB              = 0xEF; //end byte
 
 //-------------------------------------------------------------------------------------//
@@ -122,7 +122,7 @@ public:
 	} sendStack, recStack;
 
 	unsigned long timer;
-	unsigned long threshold = 50;
+	unsigned long threshold = 200;
 
 
 	bool begin(Stream& stream);

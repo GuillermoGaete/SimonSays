@@ -2,14 +2,16 @@
 #include "Bounce2.h"
 #include <inttypes.h>
 
-SimonButton::SimonButton(uint8_t buttonPin,uint8_t lightPin,uint16_t lightOnTime, uint8_t trackId){
+SimonButton::SimonButton(uint8_t buttonPin,uint8_t lightPin,uint16_t lightOnTime, uint16_t trackId){
 
   _button = new Bounce();
   _button->attach(buttonPin,INPUT);
-  _button->interval(15);
+  _button->interval(35);
   _lightPin=lightPin;
   _lightOnTime=lightOnTime;
   _trackId=trackId;
+  _timeoutVariable = 1000;
+  _timeOutGlobal = 1000;
 
   pinMode(_lightPin, OUTPUT);
   _lightState=lightStates::INIT;
@@ -20,12 +22,11 @@ void SimonButton::putLightOrder(lightOrders order=lightOrders::NOTHING){
 }
 
 void SimonButton::update(){
-   static unsigned int prevTime = 0;
-   static unsigned int currentTimeout = 0;
-   static unsigned int timeoutVariable = 1000;
+   static unsigned long prevTime = 0;
+   static unsigned long currentTimeout = 0;
 
     _button->update();
-   unsigned int currentTime=millis();
+   unsigned long currentTime=millis();
 
     switch (_lightState) {
       case lightStates::INIT:{
@@ -65,11 +66,16 @@ void SimonButton::update(){
           digitalWrite(_lightPin,true);
           _lightState=lightStates::ON_TEMPORIZED;
           prevTime=millis();
-          currentTimeout=timeoutVariable;
-          timeoutVariable=timeoutVariable-100;
-          if(timeoutVariable<400){
-            timeoutVariable=400;
+          currentTimeout=_timeoutVariable;
+          _timeoutVariable=_timeoutVariable-100;
+          if(_timeoutVariable<300){
+            _timeoutVariable=300;
           }
+        }else if(_lightOrder==lightOrders::ON_GLOBAL){
+          digitalWrite(_lightPin,true);
+          _lightState=lightStates::ON_TEMPORIZED;
+          prevTime=millis();
+          currentTimeout=_timeOutGlobal;
         }
       }break;
       default:{
@@ -77,7 +83,7 @@ void SimonButton::update(){
       }break;
     }
     if(_lightOrder==lightOrders::RESET_TIMER_VARIABLE){
-      timeoutVariable=1000;
+      _timeoutVariable=1000;
     }
     _lightOrder=lightOrders::NOTHING;
 }
@@ -88,12 +94,30 @@ SimonButton::lightStates SimonButton::getLightStatus(){
   return _lightState;
 }
 
-uint8_t SimonButton::getTrackId(){
+uint16_t SimonButton::getTrackId(){
   return _trackId;
 }
 
 uint8_t SimonButton::getLightPin(){
   return _lightPin;
+}
+void SimonButton::reset(){
+  _timeoutVariable=1000;
+  _timeOutGlobal=1000;
+  putLightOrder(SimonButton::lightOrders::OFF);
+  update();
+}
+void SimonButton::increaseTimeOutGlobal(){
+  _timeOutGlobal=_timeOutGlobal+100;
+  if(_timeOutGlobal>1000){
+    _timeOutGlobal=1000;
+  }
+}
+void SimonButton::decreaseTimeOutGlobal(){
+  _timeOutGlobal=_timeOutGlobal-80;
+  if(_timeOutGlobal<350){
+    _timeOutGlobal=350;
+  }
 }
 uint8_t SimonButton::getButtonPin(){
   return _button->getPin();

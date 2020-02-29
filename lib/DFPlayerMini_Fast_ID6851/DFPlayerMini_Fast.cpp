@@ -1,8 +1,6 @@
 #include "DFPlayerMini_Fast.h"
 
 
-
-
 bool DFPlayerMini_Fast::begin(Stream &stream)
 {
 	_serial = &stream;
@@ -69,7 +67,6 @@ void DFPlayerMini_Fast::playFromMP3Folder(uint16_t trackNum)
 	sendStack.feedbackValue = NO_FEEDBACK;
 	sendStack.paramMSB = (trackNum >> 8) & 0xFF;
 	sendStack.paramLSB = trackNum & 0xFF;
-
 	findChecksum(&sendStack);
 	sendData();
 }
@@ -155,7 +152,7 @@ void DFPlayerMini_Fast::loop(uint16_t trackNum)
   sendStack.feedbackValue = NO_FEEDBACK;
   sendStack.paramMSB = (trackNum >> 8) & 0xFF;
   sendStack.paramLSB = trackNum & 0xFF;
-  
+
   findChecksum(&sendStack);
   sendData();
 }
